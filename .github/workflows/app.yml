@@ -1,7 +1,7 @@
 name: App Android
 
 # Costruisce l'APK e lo mette nella pagina Releases (tag "app"):
-#   https://github.com/massxxx/schema-a-mano/releases/latest/download/SchemaAMano.apk
+#   https://github.com/massxxx/schema-a-mano-/releases/latest/download/SchemaAMano.apk
 # L'APK e' firmato sempre con la stessa chiave (android/debug.keystore),
 # cosi' le nuove versioni si installano sopra la vecchia senza perdere i dati.
 on:
