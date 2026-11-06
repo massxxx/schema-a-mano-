@@ -13,7 +13,7 @@ const fI=i=>{const a=Math.abs(i);return a>=1?num(i)+' A':a>=1e-3?num(i*1e3)+' mA
 function etic(c){const v=c.v;switch(c.k){case'pila':return v.V+' V';case'res':return k3(v.R);case'cap':return fmtC(v.C);case'ind':return (v.L*1e3)+' mH';case'gen':return v.Vp+' V '+v.f+' Hz';case'lamp':case'mot':return v.Vn+' V';case'led':return v.c;default:return''}}
 function memo(){storia.push(JSON.stringify(ci));if(storia.length>60)storia.shift();futuro=[];salvaFoglio()}
 function salvaFoglio(){if(ctxG.tipo=='libero'){salva.fogli[ctxG.id]=ci;scrivi()}}
-function annulla(){if(!storia.length)return;futuro.push(JSON.stringify(ci));ci=JSON.parse(storia.pop());salvaFoglio()}function ripeti(){if(!futuro.length)return;storia.push(JSON.stringify(ci));ci=JSON.parse(futuro.pop())}
+function annulla(){registro=[];racc.rec=[];if(!storia.length)return;futuro.push(JSON.stringify(ci));ci=JSON.parse(storia.pop());salvaFoglio()}function ripeti(){if(!futuro.length)return;storia.push(JSON.stringify(ci));ci=JSON.parse(futuro.pop())}
 /* ---- tratti ---- */
 function vicino(x,y,R=1.3){let best=null,dm=R;for(const q of ci.comps)for(const p of pinsOf(q)){const d=Math.hypot(p[0]-x,p[1]-y);if(d<dm){dm=d;best=p}}
  if(!best)for(const w of ci.wires){const x0=Math.min(w.a[0],w.b[0]),x1=Math.max(w.a[0],w.b[0]),y0=Math.min(w.a[1],w.b[1]),y1=Math.max(w.a[1],w.b[1]);const px=clamp(x,x0,x1),py=clamp(y,y0,y1),d=Math.hypot(px-x,py-y);if(d<dm){dm=d;best=[Math.round(px),Math.round(py)]}}return best}
@@ -26,18 +26,26 @@ function sistema(cp){const P2=KINDS[cp.k].pins.length==2;
   if(best){if(best.o){cp.y=best.v;if(cp.r%2)cp.r=(cp.r+1)%4}else{cp.x=best.v;if(cp.r%2==0)cp.r=(cp.r+1)%4}}}
  taglia(cp);
  for(const p of pinsOf(cp)){let q=null,dm=1.9;const cand=[];for(const w of ci.wires)cand.push(w.a,w.b);for(const o of ci.comps)if(o!=cp)for(const z of pinsOf(o))cand.push(z);for(const z of cand){const d=Math.hypot(z[0]-p[0],z[1]-p[1]);if(d>0&&d<dm){dm=d;q=z}}const su=cand.some(z=>z[0]==p[0]&&z[1]==p[1]);if(q&&!su){if(q[0]!=p[0]&&q[1]!=p[1]){const g=[q[0],p[1]];aggiungiFilo(p.slice(),g);aggiungiFilo(g,q.slice())}else aggiungiFilo(p.slice(),q.slice())}}}
-function fineGruppo(){clearTimeout(pendT);if(!pend.length)return;const st=pend;pend=[];const s=sembraFilo(st[0]);const b=bb(st.flat());
- const fili=st.map(sembraFilo);const tuttiFili=fili.every(f=>!f.chiuso&&f.angoli<=4&&!f.obliquo);
- if(st.length==1){if(s.obliquo&&s.L<7){memo();metti('sw',0,st,[{k:'sw'},{k:'btn'}]);return}if(!s.chiuso&&s.angoli<=3&&(s.L>=2.5||s.L<1.8&&!0)){memo();posaFilo(st[0]);return}}
- if(tuttiFili&&Math.max(b.w,b.h)>7.5){memo();st.forEach(posaFilo);return}
- const alt=riconosci(st);const a=alt[0];memo();metti(a.k,a.r,st,alt)}
-function metti(k,r,st,alt){const b=bb(st.flat());const cp={k,x:Math.round(b.cx),y:Math.round(b.cy),r:r||0,v:{...KINDS[k].v},id:Date.now()+Math.random()};
+let racc=new Racc(),registro=[],tRacc=0;const tratti=new WeakMap();
+try{caricaMiei(JSON.parse(localStorage.getItem('schema-a-mano-mano'))||[])}catch(e){}
+function salvaMiei(){try{localStorage.setItem('schema-a-mano-mano',JSON.stringify(MIEI))}catch(e){}}
+function lezione(cp,k,r){const st=tratti.get(cp);if(st){impara(st,k,r);salvaMiei()}}
+function esegui(A){for(const a of A){
+  if(a.annulla){const i=registro.findIndex(x=>x.id==a.annulla);if(i<0)continue;const dopo=registro.slice(i+1);ci=JSON.parse(registro[i].snap);storia.length=Math.min(storia.length,registro[i].sl);registro.length=i;$('#chip').innerHTML='';for(const x of dopo)applica(x.a);continue}
+  applica(a)}
+ clearTimeout(tRacc);if(racc.pend.length)tRacc=setTimeout(()=>esegui(racc.scadi(performance.now()+5)),ATTESA+30)}
+function applica(a){registro.push({id:a.id,snap:JSON.stringify(ci),sl:storia.length,a});if(registro.length>12)registro.shift();memo();
+ for(const s of a.fili)posaFilo(s);
+ if(a.comp){const q=a.comp.alt[0];metti(q.k,q.r,a.comp.st,a.comp.alt,q.flip)}
+ salvaFoglio()}
+function chiudiGruppo(){clearTimeout(tRacc);esegui(racc.scadi(Infinity));racc=new Racc();registro=[]}
+function metti(k,r,st,alt,flip){const b=bb(st.flat());const cp={k,x:Math.round(b.cx),y:Math.round(b.cy),r:r||0,v:{...KINDS[k].v},id:Date.now()+Math.random()};if(flip&&(k=='npn'||k=='pnp'))cp.flip=true;tratti.set(cp,st);
  if(k=='res'||k=='cap'||k=='ind'){cp.r=(r||0)%2}
  if(ctxG.lim&&ctxG.lim.v&&ctxG.lim.v[k])Object.assign(cp.v,ctxG.lim.v[k]);
  ci.comps.push(cp);sistema(cp);salvaFoglio();chips(cp,alt,st)}
 function chips(cp,alt,st){const[x,y]=daSch(cp.x,cp.y-3);const a=alt.filter((q,i,A)=>A.findIndex(z=>z.k==q.k)==i).slice(0,4);$('#chip').innerHTML=`<div class="chips" style="left:max(84px,calc(50% - 300px));bottom:14px;max-width:min(640px,calc(100vw - 300px))">${a.map((q,i)=>`<button data-c="${i}">${KINDS[q.k].n}</button>`).join('')}<button data-f="1">Filo</button><button data-a="1">Altro…</button></div>`;
- document.querySelectorAll('[data-c]').forEach(b=>b.onclick=()=>{const q=a[+b.dataset.c];cambia(cp,q.k,q.r);$('#chip').innerHTML=''});
- $('[data-f]').onclick=()=>{ci.comps=ci.comps.filter(z=>z!=cp);st.forEach(posaFilo);$('#chip').innerHTML='';salvaFoglio()};$('[data-a]').onclick=()=>{$('#chip').innerHTML='';scheda(cp)};
+ document.querySelectorAll('[data-c]').forEach(b=>b.onclick=()=>{const i=+b.dataset.c,q=a[i];cambia(cp,q.k,q.r);if(q.flip!=null)cp.flip=!!q.flip&&(q.k=='npn'||q.k=='pnp');if(i>0){lezione(cp,q.k,q.r);avviso('Imparato: la prossima volta lo riconosco')}$('#chip').innerHTML='';registro=[];racc.rec=[]});
+ $('[data-f]').onclick=()=>{ci.comps=ci.comps.filter(z=>z!=cp);st.forEach(posaFilo);$('#chip').innerHTML='';registro=[];racc.rec=[];salvaFoglio()};$('[data-a]').onclick=()=>{$('#chip').innerHTML='';registro=[];racc.rec=[];scheda(cp)};
  clearTimeout(chips.t);chips.t=setTimeout(()=>$('#chip').innerHTML='',5000)}
 function cambia(cp,k,r){cp.k=k;if(r!=null)cp.r=r;cp.v={...KINDS[k].v,...(ctxG.lim&&ctxG.lim.v&&ctxG.lim.v[k]||{})};delete cp.s;taglia(cp);salvaFoglio()}
 function tocca(x,y){const[gx,gy]=aSch(x,y);let best=null,dm=2.6;for(const q of ci.comps){const p=pinsOf(q);const mx=p.reduce((a,z)=>a+z[0],0)/p.length,my=p.reduce((a,z)=>a+z[1],0)/p.length,d=Math.hypot(mx-gx,my-gy);if(d<dm){dm=d;best=q}}return best}
@@ -47,28 +55,25 @@ cv.addEventListener('pointerdown',e=>{e.preventDefault();cv.setPointerCapture(e.
  dita.set(e.pointerId,{x:e.clientX,y:e.clientY,t:performance.now(),x0:e.clientX,y0:e.clientY,pen});
  if(!pen&&dita.size==2){const[a,b]=[...dita.values()];attivo=null;gesto={d:Math.hypot(a.x-b.x,a.y-b.y),mx:(a.x+b.x)/2,my:(a.y+b.y)/2,V:{...V}};return}
  if(corsa){const q=tocca(e.clientX,e.clientY);if(q&&q.k=='btn'){q.v.on=1;premuto=q;Son.clic();return}return}
- if(tool=='gomma'){memo();cancella(...aSch(e.clientX,e.clientY));return}
+ if(tool=='gomma'){chiudiGruppo();memo();cancella(...aSch(e.clientX,e.clientY));return}
  if(tool=='mano'||(penVisto&&!pen))return;
  $('#chip').innerHTML='';attivo=[aSch(e.clientX,e.clientY)]});
 let premuto=null;
-cv.addEventListener('pointermove',e=>{const d=dita.get(e.pointerId);if(!d)return;e.preventDefault();const px=d.x,py=d.y;d.x=e.clientX;d.y=e.clientY;
+cv.addEventListener('pointermove',e=>{const d=dita.get(e.pointerId);if(!d)return;e.preventDefault();const px=d.x,py=d.y;d.x=e.clientX;d.y=e.clientY;d.per=(d.per||0)+Math.hypot(d.x-px,d.y-py);
  if(gesto&&dita.size>=2){const[a,b]=[...dita.values()];const nd=Math.hypot(a.x-b.x,a.y-b.y),mx=(a.x+b.x)/2,my=(a.y+b.y)/2,s=clamp(gesto.V.s*nd/gesto.d,.5,2.6),k=s/gesto.V.s;V.s=s;V.x=mx-(gesto.mx-gesto.V.x)*k;V.y=my-(gesto.my-gesto.V.y)*k;return}
  if(tool=='gomma'&&!corsa){cancella(...aSch(e.clientX,e.clientY));return}
  if(tool=='mano'||(corsa&&dita.size==1)||(penVisto&&!d.pen)){if(!corsa||Math.hypot(d.x-d.x0,d.y-d.y0)>10){V.x+=d.x-px;V.y+=d.y-py}return}
  if(attivo){const ev=e.getCoalescedEvents?e.getCoalescedEvents():[e];for(const q of ev.length?ev:[e])attivo.push(aSch(q.clientX,q.clientY))}});
 function su(e){const d=dita.get(e.pointerId);dita.delete(e.pointerId);if(dita.size<2)gesto=null;if(!d)return;if(premuto){premuto.v.on=0;premuto=null;return}
- const fermo=Math.hypot(d.x-d.x0,d.y-d.y0)<12&&performance.now()-d.t<450;
+ const fermo=Math.hypot(d.x-d.x0,d.y-d.y0)<12&&(d.per||0)<18&&performance.now()-d.t<450;
  if(corsa){if(fermo)tapProva(d.x,d.y);return}
  if(fermo){attivo=null;const q=tocca(d.x,d.y);if(q&&tool!='gomma')scheda(q);return}
  if(attivo){const s=attivo;attivo=null;if(s.length<2)return;tratto(s)}}
 cv.addEventListener('pointerup',su);cv.addEventListener('pointercancel',e=>{dita.delete(e.pointerId);gesto=null;attivo=null});
 function tratto(s){$('#chip').innerHTML='';const f=sembraFilo(s),b=bb(s);
  // scarabocchio sopra un componente: cancella
- if(!f.chiuso&&len(s)/Math.max(Math.hypot(b.w,b.h),.1)>3.2&&f.angoli>=5&&ci.comps.some(q=>{const[mx,my]=[q.x,q.y];return mx>b.x0-1&&mx<b.x1+1&&my>b.y0-1&&my<b.y1+1})){memo();const qq=ci.comps.filter(q=>q.x>b.x0-1&&q.x<b.x1+1&&q.y>b.y0-1&&q.y<b.y1+1);ci.comps=ci.comps.filter(q=>!qq.includes(q));avviso('Cancellato');return}
- if(pend.length){const p=bb(pend.flat());const lon=b.x0>p.x1+3||b.x1<p.x0-3||b.y0>p.y1+3||b.y1<p.y0-3;if(lon)fineGruppo()}
- if(f.diag>8&&f.angoli<=7){if(pend.length)fineGruppo();memo();posaFilo(s);return}
- if(f.L>=6.5&&!f.chiuso&&f.angoli<=4&&!pend.length){memo();posaFilo(s);return}
- pend.push(s);clearTimeout(pendT);pendT=setTimeout(fineGruppo,750)}
+ if(!f.chiuso&&len(s)/Math.max(Math.hypot(b.w,b.h),.1)>3.2&&f.angoli>=5&&ci.comps.some(q=>{const[mx,my]=[q.x,q.y];return mx>b.x0-1&&mx<b.x1+1&&my>b.y0-1&&my<b.y1+1})){memo();const qq=ci.comps.filter(q=>q.x>b.x0-1&&q.x<b.x1+1&&q.y>b.y0-1&&q.y<b.y1+1);ci.comps=ci.comps.filter(q=>!qq.includes(q));registro=[];racc.rec=[];avviso('Cancellato');return}
+ esegui(racc.tratto(s,performance.now()))}
 function avviso(t,ms=2400){$('#msg').hidden=false;$('#msg').textContent=t;clearTimeout(avviso.t);avviso.t=setTimeout(()=>$('#msg').hidden=true,ms)}
 /* ---- prova ---- */
 function netDi(gx,gy){let p=vicino(gx,gy,1.5);if(!p)return null;for(const w of ci.wires){if(p[0]>=Math.min(w.a[0],w.b[0])&&p[0]<=Math.max(w.a[0],w.b[0])&&p[1]>=Math.min(w.a[1],w.b[1])&&p[1]<=Math.max(w.a[1],w.b[1])){p=w.a;break}}return corsa.nodeOf(p[0],p[1])}
@@ -79,7 +84,7 @@ function tapProva(x,y){const q=tocca(x,y);if(q&&q.k=='sw'){q.v.on=q.v.on?0:1;Son
 let sondaAttesa=null;
 function mostraTag(x,y,e){const[a,b]=e.u,va=a==null||a<0?0:corsa.V[a],vb=b==null||b<0?0:corsa.V[b];let t=KINDS[e.k].n+': ';if(e.pI&&e.pI.length>=2)t+=num(va-vb)+' V, '+fI(Math.abs(e.I));if(e.s.rot)t+=' (bruciato)';if(e.k=='amp')t=fI(e.s.m);if(e.k=='volt')t=num(e.s.m)+' V';mostra(x,y,t)}
 function mostra(x,y,t){$('#tag').innerHTML=`<div class="tag" style="left:${clamp(x+12,0,innerWidth-240)}px;top:${clamp(y-44,4,innerHeight-40)}px">${t}</div>`;clearTimeout(mostra.t);mostra.t=setTimeout(()=>$('#tag').innerHTML='',2600)}
-function avviaProva(){clearTimeout(pendT);fineGruppo();for(const q of ci.comps)delete q.s;for(const q of ci.comps)if(q.k=='btn')q.v.on=0;if(!ci.comps.length){avviso('Disegna qualcosa prima di provare');return}corsa=compila(ci);sonde=[null,null];buf=[[],[]];buft=[];aggUI()}
+function avviaProva(){chiudiGruppo();for(const q of ci.comps)delete q.s;for(const q of ci.comps)if(q.k=='btn')q.v.on=0;if(!ci.comps.length){avviso('Disegna qualcosa prima di provare');return}corsa=compila(ci);sonde=[null,null];buf=[[],[]];buft=[];aggUI()}
 function fermaProva(){corsa=null;for(const q of ci.comps)delete q.s;$('#tag').innerHTML='';aggUI()}
 let buf=[[],[]],buft=[],tdiv=.1;
 function passoProva(dtReale){const dtSim=dtReale*vel,dtMax=Math.max(2e-5,Math.min(.002,dtSim/8)),n=Math.min(60,Math.ceil(dtSim/dtMax)),dt=dtSim/n;for(let i=0;i<n;i++){passoSim(corsa,dt);for(let k=0;k<2;k++){const nd=sonde[k];if(nd!=null){const u=corsa.map[nd];buf[k].push(u<0?0:corsa.V[u])}else buf[k].push(null)}buft.push(corsa.t);if(buft.length>6000){buft.splice(0,2000);buf[0].splice(0,2000);buf[1].splice(0,2000)}}
@@ -108,7 +113,7 @@ function simbolo(g,k,c={},lum=0,s={}){const u=CELLA,col=COL.mat;g.strokeStyle=co
  case'btn':L(-2,0,-1,0);L(1,0,2,0);cer(-1,0,.13,col);cer(1,0,.13,col);{const y=c.v&&c.v.on?-.15:-.55;L(-1.1,y,1.1,y);L(0,y,0,-1.3);L(-.5,-1.3,.5,-1.3)}break;
  case'ind':L(-2,0,-1.5,0);L(1.5,0,2,0);for(let i=0;i<3;i++){g.beginPath();g.arc((-1+i)*u,0,.5*u,Math.PI,0);g.stroke()}break;
  case'rel':L(-2,-2,-2,-1);L(-2,1,-2,2);g.strokeRect(-2.6*u,-1*u,1.2*u,2*u);L(-2.7,.9,-1.3,-.9);g.setLineDash([4,4]);L(-1.3,0,1.3,0);g.setLineDash([]);L(2,-2,2,-1);L(2,1,2,2);cer(2,-1,.12,col);cer(2,1,.12,col);if(s.on)L(2,-1,2,1);else L(2,-1,1.3,.8);break;
- case'npn':case'pnp':L(-2,0,-.6,0);g.lineWidth=4;L(-.6,-1,-.6,1);g.lineWidth=2.2;L(-.6,-.4,1,-1.2);L(1,-1.2,1,-2);L(-.6,.4,1,1.2);L(1,1.2,1,2);cer(0,0,1.45);{const[a,b]=k=='npn'?[[.75,1.07],[.2,1.0]]:[[-.3,.55],[.2,.6]];if(k=='npn'){L(1,1.2,.45,1.15);L(1,1.2,.7,.75)}else{L(-.6,.4,-.1,.42);L(-.6,.4,-.3,.85)}}break;
+ case'npn':case'pnp':L(-2,0,-.6,0);g.lineWidth=4;L(-.6,-1,-.6,1);g.lineWidth=2.2;L(-.6,-.4,1,-1.2);L(1,-1.2,1,-2);L(-.6,.4,1,1.2);L(1,1.2,1,2);cer(0,0,1.45);{const[a,b]=k=='npn'?[[.75,1.07],[.2,1.0]]:[[-.3,.55],[.2,.6]];if(k=='npn'){L(1,1.2,.45,1.15);L(1,1.2,.7,.75)}else{L(-.6,-.4,-.1,-.42);L(-.6,-.4,-.3,-.85)}}break;
  case'gnd':L(0,-1,0,0);g.lineWidth=3;L(-.9,0,.9,0);L(-.55,.4,.55,.4);L(-.2,.8,.2,.8);break;
  case'not':g.fillStyle=lum?'#ffe9a8':'#fff';g.beginPath();g.moveTo(-1.5*u,-1.2*u);g.lineTo(1.1*u,0);g.lineTo(-1.5*u,1.2*u);g.closePath();g.fill();g.stroke();cer(1.4,0,.3,'#fff');L(-3,0,-1.5,0);L(1.7,0,3,0);break;
  default:{const ng=k=='nand'||k=='nor',or=k=='or'||k=='nor'||k=='xor';const x=ng?1.3:1.7;g.fillStyle=lum?'#ffe9a8':'#fff';g.beginPath();if(or){g.moveTo(-1.8*u,-1.5*u);g.quadraticCurveTo(.4*u,-1.6*u,1.4*u,0);g.quadraticCurveTo(.4*u,1.6*u,-1.8*u,1.5*u);g.quadraticCurveTo(-.9*u,0,-1.8*u,-1.5*u)}else{g.moveTo(-1.7*u,-1.5*u);g.lineTo(-.1*u,-1.5*u);g.arc(-.1*u,0,1.5*u,-Math.PI/2,Math.PI/2);g.lineTo(-1.7*u,1.5*u);g.closePath()}g.fill();g.stroke();if(ng)cer(1.72,0,.3,'#fff');if(k=='xor'){g.beginPath();g.moveTo(-2.3*u,-1.5*u);g.quadraticCurveTo(-1.4*u,0,-2.3*u,1.5*u);g.stroke()}const ix=or?-1.15:-1.7;L(-3,-1,ix,-1);L(-3,1,ix,1);L(ng?2:or?1.4:1.4,0,3,0)}}}
@@ -121,16 +126,16 @@ function disegna(){c.setTransform(dpr,0,0,dpr,0,0);c.fillStyle=COL.car;c.fillRec
  const cnt=new Map();const seg=(a,b)=>{};for(const w of ci.wires){for(const p of[w.a,w.b]){const k=p[0]+','+p[1];cnt.set(k,(cnt.get(k)||0)+1)}}for(const q of ci.comps)for(const p of pinsOf(q)){const k=p[0]+','+p[1];cnt.set(k,(cnt.get(k)||0)+1)}c.fillStyle=COL.mat;for(const[k,n]of cnt)if(n>2){const[x,y]=k.split(',').map(Number);c.beginPath();c.arc(x*G,y*G,4.2,0,7);c.fill()}
  if(corsa){const fl=flussi();for(const E of fl){const i=Math.abs(E.i);if(i<2e-6)continue;const dir=E.i>0?-1:1,[ax,ay]=E.a,[bx,by]=E.b,L=Math.hypot(bx-ax,by-ay);c.strokeStyle=`rgba(242,185,15,${clamp(.25+i*12,.25,.85)})`;c.lineWidth=2+Math.min(5,Math.log10(1+i*1e4));c.beginPath();c.moveTo(ax*G,ay*G);c.lineTo(bx*G,by*G);c.stroke();const sp=.8+Math.min(5,Math.log10(1+i*1e4));c.fillStyle='#b4620a';const ph=((tempo*sp*dir)%1.5+1.5)%1.5;for(let t=ph;t<L;t+=1.5){c.beginPath();c.arc((ax+(bx-ax)*t/L)*G,(ay+(by-ay)*t/L)*G,3,0,7);c.fill()}}}
  for(const q of ci.comps)disegnaComp(q);
- c.strokeStyle='#4a5a7a';c.lineWidth=2.2/1;for(const s of[...pend,...(attivo?[attivo]:[])]){c.beginPath();s.forEach((p,i)=>i?c.lineTo(p[0]*G,p[1]*G):c.moveTo(p[0]*G,p[1]*G));c.stroke()}
+ c.strokeStyle='#4a5a7a';c.lineWidth=2.2/1;for(const s of[...racc.pend,...(attivo?[attivo]:[])]){c.beginPath();s.forEach((p,i)=>i?c.lineTo(p[0]*G,p[1]*G):c.moveTo(p[0]*G,p[1]*G));c.stroke()}
  c.setTransform(dpr,0,0,dpr,0,0);const mx=V.x+3*cs;if(mx>0&&mx<innerWidth){c.strokeStyle=COL.mar;c.lineWidth=1.5;c.beginPath();c.moveTo(mx,0);c.lineTo(mx,innerHeight);c.stroke()}}
 function disegnaOsc(){const o=$('#osc canvas');if(!o||o.hidden)return;const g=o.getContext('2d'),w=o.width=o.clientWidth*dpr,h=o.height=160*dpr;g.fillStyle='#0d1a15';g.fillRect(0,0,w,h);g.strokeStyle='#27463a';g.lineWidth=1;for(let i=1;i<10;i++){g.beginPath();g.moveTo(i*w/10,0);g.lineTo(i*w/10,h);g.stroke()}for(let i=1;i<6;i++){g.beginPath();g.moveTo(0,i*h/6);g.lineTo(w,i*h/6);g.stroke()}
  const T=tdiv*10,t1=buft[buft.length-1]||0,yy=v=>h/2-v/ (12) *h/2;[['#7ef0a4',0],['#ffd24a',1]].forEach(([col,k])=>{if(sonde[k]==null)return;g.strokeStyle=col;g.lineWidth=2*dpr/1.5;g.beginPath();let st=0;for(let i=Math.max(0,buft.length-6000);i<buft.length;i++){const x=w-(t1-buft[i])/T*w;if(x<0||buf[k][i]==null)continue;st++?g.lineTo(x,yy(buf[k][i])):g.moveTo(x,yy(buf[k][i]))}g.stroke()})}
 /* ---- schede ---- */
-function chiudi(){$('#ov').innerHTML=''}
+function chiudi(){const q=scheda.q;if(q){scheda.q=null;if(ci.comps.includes(q)&&(q.k!=scheda.o0.k||q.r!=scheda.o0.r)){lezione(q,q.k,q.r);avviso('Imparato: la prossima volta lo riconosco')}}$('#ov').innerHTML=''}
 function pagina(h){$('#ov').innerHTML=`<div class="ov"><div class="pag">${h}</div></div>`}
 const VAL={res:[['R','Resistenza (Ω)',[100,220,470,1000,2200,4700,10000,100000,1e6]]],cap:[['C','Capacità',[1e-6,10e-6,100e-6,470e-6,1000e-6,4700e-6]]],ind:[['L','Induttanza',[.01,.1,1]]],pila:[['V','Tensione',[1.5,4.5,5,9,12]]]};
 function parseV(t){t=t.trim().toLowerCase().replace(',','.').replace(/[ωΩohmvfh]/g,'');const m=t.match(/^([\d.]+)\s*([munpkµr]?)([\d]*)$/);if(!m)return NaN;const u={k:1e3,m:1e6,'':1,r:1,u:1e-6,'µ':1e-6,n:1e-9,p:1e-12}[m[2]];let n=+m[1];if(m[3])n=+(m[1]+'.'+m[3]);return n*u}
-function scheda(q){const tutti=Object.keys(KINDS).map(k=>`<button data-t="${k}" class="${k==q.k?'on':''}">${KINDS[k].n}</button>`).join('');let val='';
+function scheda(q){scheda.q=tratti.get(q)?q:null;scheda.o0=scheda.q?{k:q.k,r:q.r}:null;const tutti=Object.keys(KINDS).map(k=>`<button data-t="${k}" class="${k==q.k?'on':''}">${KINDS[k].n}</button>`).join('');let val='';
  if(q.k=='res'){val=`<div class="riga"><b>Valore</b> ${[100,220,470,1000,2200,4700,10000,100000,1e6].map(v=>`<button data-v="${v}" class="${q.v.R==v?'on':''}">${k3(v)}</button>`).join('')}</div><div class="riga"><input id="vr" aria-label="Valore scritto" placeholder="Scrivi: 330, 4k7, 2M2" style="max-width:220px"><button id="vok">Usa</button></div>`}
  if(q.k=='cap')val=`<div class="riga"><b>Valore</b> ${[1e-6,10e-6,100e-6,470e-6,1000e-6,4700e-6].map(v=>`<button data-v="${v}" class="${q.v.C==v?'on':''}">${fmtC(v)}</button>`).join('')}</div>`;
  if(q.k=='ind')val=`<div class="riga"><b>Valore</b> ${[.01,.1,1].map(v=>`<button data-v="${v}" class="${q.v.L==v?'on':''}">${v*1e3} mH</button>`).join('')}</div>`;
@@ -145,7 +150,8 @@ function scheda(q){const tutti=Object.keys(KINDS).map(k=>`<button data-t="${k}" 
  if($('#vok'))$('#vok').onclick=()=>{const n=parseV($('#vr').value);if(n>0){memo();q.v.R=n;salvaFoglio();chiudi()}else $('#vr').value=''}}
 function guidaSimboli(){const k=['pila','res','lamp','led','dio','sw','btn','cap','ind','mot','rel','npn','and','or','not','nand','nor','xor','gnd','volt','amp','gen'];
  const consigli={pila:'una linea lunga (+), una corta',res:'rettangolo o zig-zag',lamp:'cerchio con una X',led:'triangolo, barra, due frecce',dio:'triangolo e barra',sw:'un tratto obliquo',btn:'barra con un gambo',cap:'due linee uguali',ind:'una fila di archetti',mot:'cerchio con la M',rel:'rettangolo con diagonale',npn:'cerchio, barra e due linee',and:'una D',or:'uno scudo a punta',not:'triangolo e cerchietto',nand:'D e cerchietto',nor:'scudo e cerchietto',xor:'scudo con un arco in più',gnd:'tre linee sempre più corte',volt:'cerchio con la V',amp:'cerchio con la A',gen:'cerchio con un\'onda'};
- pagina(`<div class="riga spa" style="margin:0"><h2>Come si disegnano</h2><button id="xx">Chiudi</button></div><p>Disegna il simbolo, poi fermati un attimo. Se sbaglio, scegli dalle etichette che appaiono, oppure tocca il componente. I fili sono tratti lunghi: si raddrizzano da soli.</p><p>Due dita per spostare e ingrandire. Con il pennino, il dito sposta solo il foglio.</p><div class="simb">${k.map(x=>`<div><canvas data-k="${x}" width="240" height="160"></canvas><b>${KINDS[x].n}</b><br>${consigli[x]}</div>`).join('')}</div>`);$('#xx').onclick=chiudi;
+ pagina(`<div class="riga spa" style="margin:0"><h2>Come si disegnano</h2><button id="xx">Chiudi</button></div><p>Disegna il simbolo, poi fermati un attimo. Se sbaglio, scegli dalle etichette che appaiono, oppure tocca il componente. I fili sono tratti lunghi: si raddrizzano da soli.</p><p>Due dita per spostare e ingrandire. Con il pennino, il dito sposta solo il foglio.</p><p>Se fai una pausa a metà simbolo non succede niente: finché ci disegni accanto, il quaderno rimette insieme i pezzi.</p><p>Quando correggi un simbolo, il quaderno si ricorda come lo disegni tu. <span id="nmiei"></span></p><div class="simb">${k.map(x=>`<div><canvas data-k="${x}" width="240" height="160"></canvas><b>${KINDS[x].n}</b><br>${consigli[x]}</div>`).join('')}</div>`);$('#xx').onclick=chiudi;
+ {const n=MIEI.length,e=$('#nmiei');if(n){e.innerHTML=`Esempi tuoi: ${n}. <button id="dim">Dimentica i miei simboli</button>`;$('#dim').onclick=()=>{caricaMiei([]);salvaMiei();e.textContent='Esempi tuoi: nessuno.'}}else e.textContent='Esempi tuoi: ancora nessuno.'}
  document.querySelectorAll('[data-k]').forEach(o=>{const g=o.getContext('2d');g.scale(1.55,1.55);g.translate(77,52);const q={k:o.dataset.k,v:{...KINDS[o.dataset.k].v}};simbolo(g,q.k,q)})}
 /* ---- schermate ---- */
 function home(){fermaProva();ctxG={tipo:'home'};ci={comps:[],wires:[]};storia=[];aggUI();pagina2(`<span class="mut">Quaderno di elettronica</span><h1>Schema a mano</h1><p>Disegni il circuito con il dito o il pennino. Il quaderno capisce i simboli, lo mette in tensione e ti fa vedere la corrente.</p><div class="griglia" id="hg"><button id="h1"><b>Sfide</b><small>${Object.keys(salva.fatte).filter(k=>k[0]=='s').length} di ${SFIDE.length} superate</small></button><button id="h2"><b>Trova l'errore</b><small>${Object.keys(salva.fatte).filter(k=>k[0]=='e').length} di ${ERR.length} riparati</small></button><button id="h3"><b>Banco libero</b><small>Fogli salvati e oscilloscopio</small></button><button id="h4"><b>Classe</b><small>Crea o apri un esercizio con un codice</small></button></div><div class="riga"><button id="h5">Come si disegnano i simboli</button></div>`);
@@ -157,7 +163,7 @@ function sfide(){let h='',cap='';SFIDE.forEach((s,i)=>{if(s.cap!=cap){if(cap)h+=
 function errori(){pagina2(`<div class="riga spa" style="margin:0"><h2>Trova l'errore</h2><button id="xx">Indietro</button></div><div class="griglia">${ERR.map((e,i)=>`<button data-i="${i}" class="${salva.fatte['e'+i]?'fatto':''}"><b>${i+1}. ${e.t}</b><small>${salva.fatte['e'+i]?'Riparato':'Da riparare'}</small></button>`).join('')}</div>`);$('#xx').onclick=home;document.querySelectorAll('[data-i]').forEach(b=>b.onclick=()=>{const e=ERR[+b.dataset.i];apri({tipo:'errore',i:+b.dataset.i,def:{...e}},e.c())})}
 function banchi(){const nomi=['Foglio 1','Foglio 2','Foglio 3','Foglio 4','Foglio 5','Foglio 6'];pagina2(`<div class="riga spa" style="margin:0"><h2>Banco libero</h2><button id="xx">Indietro</button></div><div class="griglia">${nomi.map((n,i)=>{const f=salva.fogli['f'+i];return`<button data-i="${i}"><b>${n}</b><small>${f&&f.comps.length?f.comps.length+' componenti':'Vuoto'}</small></button>`}).join('')}</div>`);$('#xx').onclick=home;document.querySelectorAll('[data-i]').forEach(b=>b.onclick=()=>apri({tipo:'libero',id:'f'+b.dataset.i},salva.fogli['f'+b.dataset.i]))}
 function classe(){pagina2(`<div class="riga spa" style="margin:0"><h2>Classe</h2><button id="xx">Indietro</button></div><h3>Apri un esercizio</h3><div class="riga"><input id="cod" aria-label="Codice esercizio" placeholder="Incolla il codice SAM1-…"><button id="apr" class="pri">Apri</button></div><p id="err" class="mut"></p><h3>Crea un esercizio</h3><p>Disegni la soluzione e scrivi la consegna. Il codice contiene il comportamento del circuito: lo studente deve ottenere lo stesso risultato, anche con uno schema diverso.</p><div class="riga"><button id="nu">Disegna la soluzione</button></div>`);$('#xx').onclick=home;$('#nu').onclick=()=>apri({tipo:'crea'});$('#apr').onclick=async()=>{try{const d=await decodifica($('#cod').value);apri({tipo:'classe',def:{t:d.t,txt:d.x,parti:'',aiuto:'',tab:d}})}catch(e){$('#err').textContent='Codice non valido. Controlla di averlo copiato tutto.'}}}
-function apri(g,init){corsa=null;$('#ov').innerHTML='';ctxG=g;ci=init?JSON.parse(JSON.stringify(init)):{comps:[],wires:[]};for(const q of ci.comps){q.v=q.v||{...KINDS[q.k].v}}storia=[];futuro=[];V={s:Math.min(1.3,Math.max(.8,innerWidth/1100)),x:80,y:70};tool='matita';if(g.def&&g.def.lim)g.lim=g.def.lim;aggUI()}
+function apri(g,init){clearTimeout(tRacc);racc=new Racc();registro=[];corsa=null;$('#ov').innerHTML='';ctxG=g;ci=init?JSON.parse(JSON.stringify(init)):{comps:[],wires:[]};for(const q of ci.comps){q.v=q.v||{...KINDS[q.k].v}}storia=[];futuro=[];V={s:Math.min(1.3,Math.max(.8,innerWidth/1100)),x:80,y:70};tool='matita';if(g.def&&g.def.lim)g.lim=g.def.lim;aggUI()}
 async function comprimi(s){const r=new Blob([s]).stream().pipeThrough(new CompressionStream('deflate-raw'));return new Uint8Array(await new Response(r).arrayBuffer())}
 async function codifica(o){const b=await comprimi(JSON.stringify(o));return'SAM1-'+btoa(String.fromCharCode(...b)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')}
 async function decodifica(t){t=t.trim().replace(/\s+/g,'');if(!t.startsWith('SAM1-'))throw 0;const a=atob(t.slice(5).replace(/-/g,'+').replace(/_/g,'/')),b=Uint8Array.from(a,c=>c.charCodeAt(0));const r=new Blob([b]).stream().pipeThrough(new DecompressionStream('deflate-raw'));return JSON.parse(await new Response(r).text())}
@@ -183,4 +189,4 @@ document.querySelectorAll('#vel [data-v]').forEach(b=>b.onclick=()=>{vel=+b.data
 $('#oscb').onclick=()=>{oscAperto=!oscAperto;aggUI()};document.querySelectorAll('[data-s]').forEach(b=>b.onclick=()=>{sondaAttesa=+b.dataset.s;disegnaOscBtn()});document.querySelectorAll('[data-td]').forEach(b=>b.onclick=()=>{tdiv=+b.dataset.td;document.querySelectorAll('[data-td]').forEach(z=>z.classList.toggle('on',z==b))});
 if(window.Capacitor&&Capacitor.Plugins&&Capacitor.Plugins.App)Capacitor.Plugins.App.addListener('backButton',()=>{if($('#ov').innerHTML&&ctxG.tipo!='home')chiudi();else if(ctxG.tipo!='home')$('#ind').click();else home()});
 (document.fonts&&document.fonts.ready||Promise.resolve()).then(()=>{ridim();home();requestAnimationFrame(ciclo)});
-window.__sm={get buf(){return[buf,buft,sonde,tdiv]},get ci(){return ci},set ci(x){ci=x},apri,tratto,get corsa(){return corsa},SFIDE,ERR,verifica,get ctx(){return ctxG}};
+window.__sm={get racc(){return racc},get registro(){return registro},get buf(){return[buf,buft,sonde,tdiv]},get ci(){return ci},set ci(x){ci=x},apri,tratto,get corsa(){return corsa},SFIDE,ERR,verifica,get ctx(){return ctxG}};
